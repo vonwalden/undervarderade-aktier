@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Buy the Dip</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a202c; /* Mörk bakgrund */
+            color: #e2e8f0; /* Ljus text */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .game-container {
+            background-color: #2d3748; /* Mörkare grå bakgrund för behållaren */
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+            text-align: center;
+            max-width: 600px;
+            width: 100%;
+        }
+        canvas {
+            background-color: #1a202c; /* Ännu mörkare för grafen */
+            border-radius: 10px;
+            margin-bottom: 20px;
+            border: 1px solid #4a5568; /* Lätt kantlinje */
+        }
+        .btn {
+            padding: 12px 25px;
+            border-radius: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+            border: none;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+        }
+        .btn-buy {
+            background-color: #48bb78; /* Grön */
+            color: white;
+            margin-right: 15px;
+        }
+        .btn-buy:hover {
+            background-color: #38a169;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 8px rgba(0, 0, 0, 0.3);
+        }
+        .btn-buy:disabled {
+            background-color: #2f855a;
+            cursor: not-allowed;
+            opacity: 0.7;
+            transform: none;
+            box-shadow: none;
+        }
+        .btn-sell {
+            background-color: #f56565; /* Röd */
+            color: white;
+        }
+        .btn-sell:hover {
+            background-color: #e53e3e;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 8px rgba(0, 0, 0, 0.3);
+        }
+        .btn-sell:disabled {
+            background-color: #c53030;
+            cursor: not-allowed;
+            opacity: 0.7;
+            transform: none;
+            box-shadow: none;
+        }
+        .btn-reset {
+            background-color: #63b3ed; /* Blå */
+            color: white;
+            margin-top: 20px;
+        }
+        .btn-reset:hover {
+            background-color: #4299e1;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 8px rgba(0, 0, 0, 0.3);
+        }
+        .info-panel {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .info-item {
+            background-color: #4a5568;
+            padding: 10px 15px;
+            border-radius: 10px;
+            min-width: 120px;
+        }
+        .message-box {
+            background-color: #3182ce; /* Blå för meddelanden */
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 20px;
+            font-weight: bold;
+            display: none; /* Dold som standard */
+        }
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+            color: #63b3ed;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>Buy the Dip</h1>
+
+        <div class="info-panel">
+            <div class="info-item">
+                <p class="text-sm text-gray-300">Aktuellt pris:</p>
+                <p id="currentPrice" class="text-xl font-bold">$100.00</p>
+            </div>
+            <div class="info-item">
+                <p class="text-sm text-gray-300">Köp kvar:</p>
+                <p id="buyCount" class="text-xl font-bold">3</p>
+            </div>
+            <div class="info-item">
+                <p class="text-sm text-gray-300">Sälj kvar:</p>
+                <p id="sellCount" class="text-xl font-bold">3</p>
+            </div>
+            <div class="info-item">
+                <p class="text-sm text-gray-300">Total Vinst:</p>
+                <p id="totalProfit" class="text-xl font-bold">0.00%</p>
+            </div>
+        </div>
+
+        <canvas id="stockChart" width="500" height="250"></canvas>
+
+        <div class="flex justify-center mt-4">
+            <button id="buyButton" class="btn btn-buy">KÖP</button>
+            <button id="sellButton" class="btn btn-sell" disabled>SÄLJ</button>
+        </div>
+
+        <button id="resetButton" class="btn btn-reset hidden">Spela igen</button>
+
+        <div id="messageBox" class="message-box"></div>
+    </div>
+
+    <script>
+        // Globala variabler för spelet
+        let currentPrice = 100; // Aktuellt pris
+        let buyPrice = 0; // Priset när vi köpte
+        let transactions = []; // Lista över genomförda transaktioner {buy: price, sell: price, profit: percent}
+        let buysRemaining = 3; // Antal köp kvar
+        let sellsRemaining = 3; // Antal sälj kvar
+        let totalProfit = 0; // Total procentuell vinst
+        let hasBought = false; // Sant om vi har ett aktivt köp
+        let gameEnded = false; // Sant om spelet är slut
+        let priceInterval; // Interval för prisuppdateringar
+
+        // DOM-element
+        const currentPriceEl = document.getElementById('currentPrice');
+        const buyCountEl = document.getElementById('buyCount');
+        const sellCountEl = document.getElementById('sellCount');
+        const totalProfitEl = document.getElementById('totalProfit');
+        const buyButton = document.getElementById('buyButton');
+        const sellButton = document.getElementById('sellButton');
+        const resetButton = document.getElementById('resetButton');
+        const messageBox = document.getElementById('messageBox');
+
+        // Canvas och kontext för grafen
+        const canvas = document.getElementById('stockChart');
+        const ctx = canvas.getContext('2d');
+        let chartData = []; // Data för grafen (prisvärden)
+        const maxDataPoints = 100; // Max antal punkter i grafen
+        const initialPrice = 100; // Startpris för aktien
+
+        // Funktion för att rita grafen
+        function drawChart() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Rensa canvas
+
+            // Rita rutnät och axlar (valfritt, men gör det tydligare)
+            ctx.strokeStyle = '#4a5568';
+            ctx.lineWidth = 0.5;
+            // Horisontella linjer
+            for (let i = 0; i <= 10; i++) {
+                ctx.beginPath();
+                ctx.moveTo(0, i * (canvas.height / 10));
+                ctx.lineTo(canvas.width, i * (canvas.height / 10));
+                ctx.stroke();
+            }
+            // Vertikala linjer
+            for (let i = 0; i <= 10; i++) {
+                ctx.beginPath();
+                ctx.moveTo(i * (canvas.width / 10), 0);
+                ctx.lineTo(i * (canvas.width / 10), canvas.height);
+                ctx.stroke();
+            }
+
+            // Rita grafen
+            if (chartData.length === 0) return;
+
+            ctx.beginPath();
+            ctx.strokeStyle = '#63b3ed'; // Blå linje för grafen
+            ctx.lineWidth = 2;
+
+            // Skala priserna till canvas-höjd
+            const minPrice = Math.min(...chartData);
+            const maxPrice = Math.max(...chartData);
+            const priceRange = maxPrice - minPrice;
+            const scaleY = (priceRange > 0) ? canvas.height / priceRange : 0;
+
+            chartData.forEach((price, index) => {
+                const x = (index / (maxDataPoints - 1)) * canvas.width;
+                // Invertera y-koordinaten så att högre pris är högre upp på grafen
+                const y = canvas.height - ((price - minPrice) * scaleY);
+
+                if (index === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            });
+            ctx.stroke();
+
+            // Rita köp- och säljpunkter
+            transactions.forEach(trans => {
+                const buyIndex = chartData.indexOf(trans.buy); // Hitta index för köppriset
+                const sellIndex = chartData.indexOf(trans.sell); // Hitta index för säljpriset
+
+                if (trans.buy > 0) { // Om det finns ett köppris
+                    const buyX = (buyIndex / (maxDataPoints - 1)) * canvas.width;
+                    const buyY = canvas.height - ((trans.buy - minPrice) * scaleY);
+                    ctx.beginPath();
+                    ctx.arc(buyX, buyY, 5, 0, Math.PI * 2);
+                    ctx.fillStyle = '#48bb78'; // Grön för köp
+                    ctx.fill();
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                }
+
+                if (trans.sell > 0) { // Om det finns ett säljpris
+                    const sellX = (sellIndex / (maxDataPoints - 1)) * canvas.width;
+                    const sellY = canvas.height - ((trans.sell - minPrice) * scaleY);
+                    ctx.beginPath();
+                    ctx.arc(sellX, sellY, 5, 0, Math.PI * 2);
+                    ctx.fillStyle = '#f56565'; // Röd för sälj
+                    ctx.fill();
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                }
+            });
+        }
+
+        // Funktion för att uppdatera aktiekursen
+        function updatePrice() {
+            // Simulera en slumpmässig prisrörelse med en bias
+            // En slumpmässig förändring mellan -2 och +2
+            let change = (Math.random() - 0.5) * 4;
+            // Lägg till en liten "trend" för att undvika att priset går ur kontroll
+            if (currentPrice < 90) change += 0.5; // Uppåt om det är för lågt
+            if (currentPrice > 110) change -= 0.5; // Nedåt om det är för högt
+
+            currentPrice += change;
+            // Se till att priset inte blir negativt
+            if (currentPrice < 1) currentPrice = 1;
+
+            currentPriceEl.textContent = `$${currentPrice.toFixed(2)}`;
+
+            // Lägg till nytt pris i grafdata
+            chartData.push(currentPrice);
+            if (chartData.length > maxDataPoints) {
+                chartData.shift(); // Ta bort äldsta datapunkten
+            }
+            drawChart(); // Rita om grafen
+        }
+
+        // Funktion för att visa meddelanden
+        function showMessage(msg, type = 'info') {
+            messageBox.textContent = msg;
+            messageBox.style.display = 'block';
+            // Du kan lägga till olika stilar baserat på 'type' om du vill (t.ex. error, success)
+            if (type === 'error') {
+                messageBox.style.backgroundColor = '#e53e3e';
+            } else if (type === 'success') {
+                messageBox.style.backgroundColor = '#38a169';
+            } else {
+                messageBox.style.backgroundColor = '#3182ce';
+            }
+            setTimeout(() => {
+                messageBox.style.display = 'none';
+            }, 3000); // Dölj meddelandet efter 3 sekunder
+        }
+
+        // Funktion för att köpa aktier
+        function buyStock() {
+            if (gameEnded) return;
+
+            if (buysRemaining > 0 && !hasBought) {
+                buyPrice = currentPrice;
+                buysRemaining--;
+                hasBought = true; // Sätt att vi har ett aktivt köp
+                transactions.push({ buy: buyPrice, sell: 0, profit: 0 }); // Lägg till i transaktioner
+                buyButton.disabled = true;
+                sellButton.disabled = false;
+                buyCountEl.textContent = buysRemaining;
+                showMessage(`Köpte för $${buyPrice.toFixed(2)}`, 'success');
+                drawChart(); // Rita om för att visa köppunkt
+            } else if (hasBought) {
+                showMessage("Du måste sälja innan du kan köpa igen!", 'error');
+            } else {
+                showMessage("Inga fler köp kvar!", 'error');
+            }
+            checkGameEnd();
+        }
+
+        // Funktion för att sälja aktier
+        function sellStock() {
+            if (gameEnded) return;
+
+            if (sellsRemaining > 0 && hasBought) {
+                const sellPrice = currentPrice;
+                sellsRemaining--;
+                hasBought = false; // Återställ till att inget aktivt köp finns
+                sellButton.disabled = true;
+                buyButton.disabled = false; // Aktivera köpknappen igen
+
+                // Hitta den senaste oavslutade transaktionen och uppdatera den
+                const lastTransaction = transactions.find(t => t.sell === 0);
+                if (lastTransaction) {
+                    lastTransaction.sell = sellPrice;
+                    const profit = ((sellPrice - buyPrice) / buyPrice) * 100;
+                    lastTransaction.profit = profit;
+                    totalProfit += profit;
+                }
+
+                sellCountEl.textContent = sellsRemaining;
+                totalProfitEl.textContent = `${totalProfit.toFixed(2)}%`;
+                showMessage(`Sålde för $${sellPrice.toFixed(2)}. Vinst: ${lastTransaction.profit.toFixed(2)}%`, 'success');
+                drawChart(); // Rita om för att visa säljpunkt
+            } else if (!hasBought) {
+                showMessage("Du måste köpa aktier innan du kan sälja!", 'error');
+            } else {
+                showMessage("Inga fler sälj kvar!", 'error');
+            }
+            checkGameEnd();
+        }
+
+        // Funktion för att kontrollera om spelet är slut
+        function checkGameEnd() {
+            if (buysRemaining === 0 && sellsRemaining === 0 && !hasBought) {
+                endGame();
+            } else if (buysRemaining === 0 && sellsRemaining === 0 && hasBought) {
+                // Om man har ett aktivt köp kvar men inga sälj
+                showMessage("Du har inga sälj kvar! Sälj den sista positionen för att avsluta spelet.", 'error');
+            }
+        }
+
+        // Funktion för att avsluta spelet
+        function endGame() {
+            gameEnded = true;
+            clearInterval(priceInterval); // Stoppa prisuppdateringarna
+            buyButton.disabled = true;
+            sellButton.disabled = true;
+            resetButton.classList.remove('hidden'); // Visa spela igen-knappen
+            showMessage(`Spelet slut! Din totala vinst är ${totalProfit.toFixed(2)}%.`, 'info');
+        }
+
+        // Funktion för att starta om spelet
+        function resetGame() {
+            currentPrice = initialPrice;
+            buyPrice = 0;
+            transactions = [];
+            buysRemaining = 3;
+            sellsRemaining = 3;
+            totalProfit = 0;
+            hasBought = false;
+            gameEnded = false;
+            chartData = []; // Rensa grafdata
+
+            currentPriceEl.textContent = `$${currentPrice.toFixed(2)}`;
+            buyCountEl.textContent = buysRemaining;
+            sellCountEl.textContent = sellsRemaining;
+            totalProfitEl.textContent = `${totalProfit.toFixed(2)}%`;
+            buyButton.disabled = false;
+            sellButton.disabled = true;
+            resetButton.classList.add('hidden'); // Dölj spela igen-knappen
+            messageBox.style.display = 'none';
+
+            // Initialisera grafen med startpris
+            for (let i = 0; i < maxDataPoints; i++) {
+                chartData.push(initialPrice);
+            }
+            drawChart(); // Rita initial graf
+            startPriceUpdates(); // Starta prisuppdateringarna igen
+        }
+
+        // Starta prisuppdateringar
+        function startPriceUpdates() {
+            priceInterval = setInterval(updatePrice, 100); // Uppdatera var 100ms
+        }
+
+        // Eventlyssnare
+        buyButton.addEventListener('click', buyStock);
+        sellButton.addEventListener('click', sellStock);
+        resetButton.addEventListener('click', resetGame);
+
+        // Kör vid laddning av sidan
+        window.onload = function() {
+            resetGame(); // Initialisera spelet vid start
+        };
+
+        // Anpassa canvas storlek vid fönsterstorleksändring
+        window.addEventListener('resize', () => {
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+            drawChart(); // Rita om grafen med ny storlek
+        });
+    </script>
+</body>
+</html>
